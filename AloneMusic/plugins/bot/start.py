@@ -35,24 +35,24 @@ EFFECT_ID = [
 ]
 
 
-@app.on_message(filters.command(["start"]) & filters.private & ~BANNED_USERS)
-@LanguageStart
-async def start_pm(client, message: Message, _):
-    await add_served_user(message.from_user.id)
+#@app.on_message(filters.command(["start"]) & filters.private & ~BANNED_USERS)
+#@LanguageStart
+#async def start_pm(client, message: Message, _):
+ #   await add_served_user(message.from_user.id)
     await message.react("🍓")
     if len(message.text.split()) > 1:
         name = message.text.split(None, 1)[1]
         if name[0:4] == "help":
             keyboard = help_pannel(_)
             return await message.reply_photo(
-                photo=config.START_IMG_URL,
-                has_spoiler=True,
-                caption=_["help_1"].format(config.SUPPORT_CHAT),
-                reply_markup=keyboard,
-            )
-        if name[0:3] == "sud":
+   #             photo=config.START_IMG_URL,
+  #              has_spoiler=True,
+   #             caption=_["help_1"].format(config.SUPPORT_CHAT),
+   #             reply_markup=keyboard,
+ #           )
+  #      if name[0:3] == "sud":
             await sudoers_list(client=client, message=message, _=_)
-            if await is_on_off(2):
+   #         if await is_on_off(2):
                 return await app.send_message(
                     chat_id=config.LOGGER_ID,
                     text=f"{message.from_user.mention} ᴊᴜsᴛ sᴛᴀʀᴛᴇᴅ ᴛʜᴇ ʙᴏᴛ ᴛᴏ ᴄʜᴇᴄᴋ <b>sᴜᴅᴏʟɪsᴛ</b>.\n\n<b>ᴜsᴇʀ ɪᴅ :</b> <code>{message.from_user.id}</code>\n<b>ᴜsᴇʀɴᴀᴍᴇ :</b> @{message.from_user.username}",
@@ -61,7 +61,7 @@ async def start_pm(client, message: Message, _):
         if name[0:3] == "inf":
             m = await message.reply_text("🔎")
             query = (str(name)).replace("info_", "", 1)
-            query = f"https://www.youtube.com/watch?v={query}"
+   #         query = f"https://www.youtube.com/watch?v={query}"
             results = VideosSearch(query, limit=1)
             for result in (await results.next())["result"]:
                 title = result["title"]
@@ -78,11 +78,11 @@ async def start_pm(client, message: Message, _):
             key = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton(text=_["S_B_8"], url=link),
-                        InlineKeyboardButton(text=_["S_B_9"], url=config.SUPPORT_CHAT),
-                    ],
+       #                 InlineKeyboardButton(text=_["S_B_8"], url=link),
+      #                  InlineKeyboardButton(text=_["S_B_9"], url=config.SUPPORT_CHAT),
+ #                   ],
                 ]
-            )
+ #           )
             await m.delete()
             await app.send_photo(
                 chat_id=message.chat.id,
@@ -98,17 +98,17 @@ async def start_pm(client, message: Message, _):
                 )
     else:
         out = private_panel(_)
-        await message.reply_photo(
-            photo=config.START_IMG_URL,
+    #    await message.reply_photo(
+  #          photo=config.START_IMG_URL,
             has_spoiler=True,
-            message_effect_id=random.choice(EFFECT_ID),
+    #        message_effect_id=random.choice(EFFECT_ID),
             caption=_["start_2"].format(message.from_user.mention, app.mention),
-            reply_markup=InlineKeyboardMarkup(out),
+   #         reply_markup=InlineKeyboardMarkup(out),
         )
-        if await is_on_off(2):
-            return await app.send_message(
-                chat_id=config.LOGGER_ID,
-                text=f"{message.from_user.mention} ᴊᴜsᴛ sᴛᴀʀᴛᴇᴅ ᴛʜᴇ ʙᴏᴛ.\n\n<b>ᴜsᴇʀ ɪᴅ :</b> <code>{message.from_user.id}</code>\n<b>ᴜsᴇʀɴᴀᴍᴇ :</b> @{message.from_user.username}",
+#        if await is_on_off(2):
+  #          return await app.send_message(
+   #             chat_id=config.LOGGER_ID,
+ #               text=f"{message.from_user.mention} ᴊᴜsᴛ sᴛᴀʀᴛᴇᴅ ᴛʜᴇ ʙᴏᴛ.\n\n<b>ᴜsᴇʀ ɪᴅ :</b> <code>{message.from_user.id}</code>\n<b>ᴜsᴇʀɴᴀᴍᴇ :</b> @{message.from_user.username}",
             )
 
 
@@ -118,8 +118,8 @@ async def start_gp(client, message: Message, _):
     out = start_panel(_)
     uptime = int(time.time() - _boot_)
     await message.reply_photo(
-        photo=config.START_IMG_URL,
-        has_spoiler=True,
+  #      photo=config.START_IMG_URL,
+ #       has_spoiler=True,
         caption=_["start_1"].format(app.mention, get_readable_time(uptime)),
         reply_markup=InlineKeyboardMarkup(out),
     )
