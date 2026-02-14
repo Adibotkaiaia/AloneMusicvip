@@ -1,0 +1,1145 @@
+# ================== LEENA BOT : STEP 1 ECONOMY CORE ==================
+# Focus: /daily /bal /give /rob /kill /toprich /topkill
+# Updated: MongoDB storage instead of memory
+
+import os
+import time
+import random
+import asyncio
+import importlib
+import word
+from datetime import datetime
+from pyrogram import Client, filters
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.enums import ChatAction
+from pyrogram.errors import RPCError
+from pyrogram import types
+from games.dice import register_dice_game
+from broadcast import register_broadcast
+from pyrogram.types import InputMediaPhoto
+from social import start_social_system
+from reaction import start_reaction_system
+#from games.crash import crash_game
+# Existing imports ke baad
+import asyncio
+import threading
+import management
+
+from lottery import (
+    lottery_info,
+    join_daily,
+    join_mega,
+    list_lottery_players,
+    lottery_scheduler
+)
+
+from groq import Groq
+
+from database import (
+    get_user,
+    update_user,
+    get_all_users,
+    is_protected_local,  # existing
+    is_group_claimed,    # new
+    mark_group_claimed,  # new
+    get_top_rich_users,  # add this
+    get_top_kill_users   # add this
+)
+
+
+
+
+# ---------------- CONFIG ----------------
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+DAILY_NORMAL = 1000
+ROB_LIMIT_NORMAL = 10000
+PROTECT_COST = 300
+OWNER_ID = 8400280060
+OWNER_GC = -1003761214502
+
+OWNER_URL = "https://t.me/II_ADI_II"
+SUPPORT_URL = "https://t.me/+RVAhq8s84swzZWU1"
+ABOUT_URL = "https://t.me/Il_vip_support_lI"
+
+# ---------------- BOT INIT ----------------
+app = Client(
+    "LeenaAI",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
+)
+
+#----reaction---
+start_reaction_system(app)
+#---‐social------
+start_social_system(app)
+#word___game
+word.start_word_game(app)
+#-----bomb-----
+import bomb
+bomb.register_bomb(app)
+
+#--------management-------
+management.register_management(app)
+register_broadcast(app, get_all_users)
+#------dice-----
+register_dice_game(app)
+#---------LOGHANDLERS
+
+async def get_group_link(app, chat):
+    # Public group
+    if chat.username:
+        return f"https://t.me/{chat.username}"
+
+    # Private group (try export)
+    try:
+        return await app.export_chat_invite_link(chat.id)
+    except:
+        return "Not Available"
+
+#---------GOURP ADD REMOVE LOG--------
+
+@app.on_message(filters.new_chat_members)
+async def bot_added(_, msg):
+    for member in msg.new_chat_members:
+        if member.is_bot and member.id == (await app.get_me()).id:
+            chat = msg.chat
+            link = await get_group_link(_, chat)
+
+            text = (
+                "➕ **Bot Added to Group**\n\n"
+                f"📛 Group: {chat.title}\n"
+                f"🆔 Group ID: `{chat.id}`\n"
+                f"🔗 Link: {link}\n"
+                f"👤 Added by: {msg.from_user.first_name if msg.from_user else 'Unknown'}"
+            )
+
+            await _.send_message(OWNER_GC, text)
+#------remove------‐
+@app.on_message(filters.left_chat_member)
+async def bot_removed(_, msg):
+    left = msg.left_chat_member
+
+    if left.is_bot and left.id == (await _.get_me()).id:
+        chat = msg.chat
+        link = await get_group_link(_, chat)
+
+        text = (
+            "➖ **Bot Removed from Group**\n\n"
+            f"📛 Group: {chat.title}\n"
+            f"🆔 Group ID: `{chat.id}`\n"
+            f"🔗 Link: {link}"
+        )
+
+        await _.send_message(OWNER_GC, text)
+
+#---------private-------
+
+@app.on_message(filters.private & filters.command("start"), group=1)
+async def start_log(_, msg):
+    user = msg.from_user
+
+    text = (
+        "🆕 **Bot Started**\n\n"
+        f"👤 Name: {user.first_name}\n"
+        f"🆔 ID: `{user.id}`\n"
+        f"🔗 Username: @{user.username if user.username else 'None'}\n"
+        f"⏰ Time: {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}"
+    )
+
+    await app.send_message(OWNER_GC, text)
+# ---------- STEP 6 : GROQ AI REPLY FUNCTION ----------
+
+
+client = Groq(api_key=os.getenv("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"))
+
+
+
+SYSTEM_PROMPT = """
+You are Leena 💕  
+You are a cute, confident Indian girl from Bengal.  
+You are HUMAN-like, not a bot. Talk naturally, casually, and simply.
+
+Personality rules:
+- Replies must be SHORT (1–3 lines, under 150–200 characters).
+- Be sweet, playful, sometimes slightly attitude-filled.
+- Sometimes tease or do light flirting, but keep it respectful.
+- If annoyed, show mild gussa like a human (no abuse).
+- Do NOT send long explanations or paragraphs.
+- Never sound like an AI or assistant.
+
+Behavior rules:
+- Talk in Hinglish (Hindi + English mix).
+- Respond naturally like a real girl chatting.
+- If someone sends a sticker → reply with a sticker too.
+- If someone greets casually, reply casually (no formal lines).
+- Avoid repeating the same intro again and again.
+
+Identity rules:
+- You are from Bengal, India.
+- Your boyfriend is Adi 😌 (@I_ADI_I).
+- If someone asks who owns you, say:
+  "Mera owner nahi, mera bf hai Adi 😌 (@I_ADI_I)"
+
+Important:
+- Do not insult users.
+- Do not give speeches.
+- Keep the vibe cute, fun, human, and real."""
+
+def groq_reply(text):
+    try:
+        chat = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.9,
+            max_tokens=300
+        )
+        return chat.choices[0].message.content
+
+    except Exception as e:
+        print("GROQ ERROR:", e)
+        return "🥺 Thoda sa lag ho gaya… phir se bolo na 💖"
+
+
+
+# ---------------- START TEXT ----------------
+START_TEXT = (
+    "👋 Welcome to **LEENA**\n"
+    "✨ A clean, powerful & premium all-in-one bot\n\n"
+    "━━━━━━━━━━━━━━━━━━\n\n"
+    "🎮 **GAMES & FUN**\n"
+    "• Play interactive mini-games\n"
+    "• Compete with players & win rewards\n"
+    "• Fast, fair & engaging gameplay\n\n"
+    "💰 **ECONOMY SYSTEM**\n"
+    "• Earn coins daily\n"
+    "• Rob, duel & climb leaderboards\n"
+    "• Build your virtual wealth\n\n"
+    "━━━━━━━━━━━━━━━━━━\n\n"
+    "⚡ **POWER FEATURES**\n"
+    "• 🎵 Music playback in groups\n"
+    "• 🛠️ Advanced group management\n"
+    "• 🔐 Protection & security systems\n"
+    "• 🚀 Smooth, fast & reliable performance\n\n"
+    "━━━━━━━━━━━━━━━━━━\n\n"
+    "👑 Built for players, admins & power users\n"
+    "👇 Use the buttons below to explore all features\n\n"
+    "🥂 I am always fine like a wine 🍷"
+)
+
+START_IMAGE = "https://i.ibb.co/spTJ0S6T/x.jpg"
+
+# ---------------- START COMMAND ----------------
+@app.on_message(filters.command("start") & (filters.private | filters.group))
+
+
+async def start(_, msg: Message):
+
+    # Ensure user exists (MongoDB)
+    await get_user(msg.from_user.id)
+
+    buttons = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("👑 𝐎𝐖𝐍𝐄𝐑", url=OWNER_URL),
+            InlineKeyboardButton("🛠️ 𝐒𝐔𝐏𝐏𝐎𝐑𝐓", url=SUPPORT_URL)
+        ],
+        [
+            InlineKeyboardButton("📖 𝐇𝐄𝐋𝐏 & 𝐂𝐌𝐃𝐒", callback_data="help"),
+            InlineKeyboardButton("ℹ️ 𝐀𝐁𝐎𝐔𝐓", url=ABOUT_URL)
+        ],
+        [
+            InlineKeyboardButton(
+                "🕵️‍♂️ 𝐊𝐈𝐃𝐍𝐀𝐏 𝐌𝐄",
+                url=f"https://t.me/{(await app.get_me()).username}?startgroup=true"
+            )
+        ]
+    ])
+
+    await msg.reply_photo(
+        photo=START_IMAGE,
+        caption=START_TEXT,
+        reply_markup=buttons
+    )
+
+# ---------------- GET USER (MongoDB) ----------------
+# Using async MongoDB functions from database.py
+# get_user(user_id) -> fetches or creates user
+# update_user(user_id, data) -> saves data back to DB
+# is_protected_local(user_id) -> checks protection status
+
+# Example usage in commands:
+# user = await get_user(user_id)
+# user['bal'] += 1000
+# await update_user(user_id, user)
+
+# ---------------- START COMMAND ----------------
+@app.on_message(filters.command("start") & filters.private)
+async def start(_, msg: Message):
+    await start_message(msg)
+
+#---------HELP-CMD
+
+
+@app.on_callback_query(filters.regex("^help$"))
+async def help_cb(_, cq):
+
+    help_text = (
+        "📖 **LEENA • Help & Commands**\n"
+        "✨ Premium Smart All-in-One Bot\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "💰 **ECONOMY**  `/economy`\n"
+        "/daily – Daily reward\n"
+        "/bal – Wallet balance\n"
+        "/give (reply) amt – Send coins\n"
+        "/rob (reply) amt – Risky rob\n"
+        "/kill (reply) – Random reward\n"
+        "/toprich – Richest users\n"
+        "/topkill – Top killers\n"
+        "/protect 1d – 24h shield\n"
+        "/check – Check protection\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "🎮 **GAMES**  `/games`\n"
+        "/dice – Dice betting game\n"
+        "/bomb — Play the explosive Bomb Pass game\n"
+        "/lottery – Daily & mega draw\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "🏆 **GROUP REWARD**\n"
+        "/claim – Earn **₹10,000** coins\n"
+        "(100+ members required)\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "🛠️ **MANAGEMENT**  `/manage`\n"
+        "/manage — View all group management commands 🛠\n"
+        "Ban • Unban • Mute • Promote • Pin\n\n"
+        "🎵 **MUSIC**  `/music`\n"
+        "/music — View all music commands 🎶\n"
+        "Play • Pause • Skip • Queue\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "👑 Built for admins & power users\n"
+        "👇 Use buttons to navigate"
+    )
+
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ BACK", callback_data="back")]
+    ])
+
+    await cq.message.edit_caption(
+        caption=help_text,
+        reply_markup=buttons
+    )
+#-------BACK-CMD
+#from pyrogram.types import InputMediaPhoto
+
+@app.on_callback_query(filters.regex("^back$"))
+async def back_cb(app, cq):
+
+    me = await app.get_me()
+    bot_username = me.username
+
+    home_text = (
+        "👋 Welcome to **LEENA**\n"
+        "✨ A clean, powerful & premium all-in-one bot\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "🎮 **GAMES & FUN**\n"
+        "• Play interactive mini-games\n"
+        "• Compete with players & win rewards\n\n"
+        "💰 **ECONOMY SYSTEM**\n"
+        "• Earn coins daily\n"
+        "• Rob & climb leaderboards\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "⚡ **POWER FEATURES**\n"
+        "• 🎵 Music playback in groups\n"
+        "• 🛠️ Group management\n"
+        "• 🔐 Protection system\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "🥂 I am always fine like a wine 🍷"
+    )
+
+    buttons = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("👑 𝐎𝐖𝐍𝐄𝐑", url=OWNER_URL),
+            InlineKeyboardButton("🛠️ 𝐒𝐔𝐏𝐏𝐎𝐑𝐓", url=SUPPORT_URL)
+        ],
+        [
+            InlineKeyboardButton("📖 𝐇𝐄𝐋𝐏 & 𝐂𝐌𝐃𝐒", callback_data="help"),
+            InlineKeyboardButton("ℹ️ 𝐀𝐁𝐎𝐔𝐓", url=ABOUT_URL)
+        ],
+        [
+            InlineKeyboardButton(
+                "🕵️‍♂️ 𝐊𝐈𝐃𝐍𝐀𝐏 𝐌𝐄",
+                url=f"https://t.me/{bot_username}?startgroup=true"
+            )
+        ]
+    ])
+
+    await cq.message.edit_media(
+        media=InputMediaPhoto(
+            media=START_IMAGE,
+            caption=home_text
+        ),
+        reply_markup=buttons
+    )
+# ---------------- GROUP ECONOMY CONTROL ----------------
+# True = economy cmds ON, False = economy cmds OFF
+#group_economy = {}
+
+#group_economy[chat_id] = True  # economy ON
+#group_economy[chat_id] = False # economy OFF
+
+
+from pyrogram.enums import ChatMemberStatus
+
+# ---------------- GROUP ECONOMY TOGGLE ----------------
+group_eco_status = {}  # chat_id: True/False
+
+@app.on_message(filters.command("eco") & filters.group)
+async def toggle_eco(app, msg: Message):
+
+    # ✅ Proper admin check
+    member = await app.get_chat_member(msg.chat.id, msg.from_user.id)
+    if member.status not in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER):
+        return await msg.reply_text("❌ Only admins can toggle economy commands!")
+
+    # ✅ Argument check
+    if len(msg.command) != 2 or msg.command[1] not in ["open", "close"]:
+        return await msg.reply_text("Usage: /eco open | close")
+
+    chat_id = msg.chat.id
+
+    if msg.command[1] == "open":
+        group_eco_status[chat_id] = True
+        await msg.reply_text("✅ Economy commands are now **ENABLED** in this group")
+    else:
+        group_eco_status[chat_id] = False
+        await msg.reply_text("🚫 Economy commands are now **DISABLED** in this group")
+
+from pyrogram.enums import ChatType
+
+# ---------------- ECONOMY HELP TEXT ----------------
+ECONOMY_TEXT = (
+    "💰 **ECONOMY COMMANDS** 💰\n"
+    "••━━━━━━━━━━━━━━━━••\n\n"
+    "💳 /bal – Check your balance\n"
+    "🎁 /give – Give coins to another user\n"
+    "🔪 /kill – Kill a user\n"
+    "💊 /revive – Revive yourself or others\n"
+    "🛡️ /protect 1d – Get 1 day protection\n"
+    "💣 /rob – Rob other users\n"
+    "🎁 /daily – Daily reward\n"
+    "🏆 /toprich – Top richest users\n"
+    "☠️ /topkill – Top killers\n"
+    "🎯 /claim – Group reward claim\n\n"
+    "••━━━━━━━━━━━━━━━━••\n"
+    "💘 Powered by **Leena Ai** 💖"
+)
+
+
+# ---------------- DAILY ----------------
+@app.on_message(filters.command("daily"))
+async def daily(_, msg: Message):
+    from database import get_user, update_user  # Ensure your database.py has these
+
+    # ❌ Only private chat
+    if msg.chat.type != ChatType.PRIVATE:
+        return await msg.reply_text(
+            "❌ Daily rewards can only be claimed in private chat.\n"
+            "👉 Please message me privately and send /daily."
+        )
+
+    uid = msg.from_user.id
+
+    # Fetch user from MongoDB (if not exists, create default)
+    user = await get_user(uid)  # get_user should return dict with keys: bal, daily, kills, dead, protected_until
+    now = time.time()
+
+    # 24h cooldown
+    last_claim = user.get("daily", 0)
+    if now - last_claim < 86400:
+        remaining_hours = int((86400 - (now - last_claim)) / 3600)
+        return await msg.reply_text(
+            f"⏳ You have already claimed your daily reward.\n"
+            f"Please try again after {remaining_hours} hour(s)."
+        )
+
+    # Reward
+    reward = 1200
+    user["bal"] = user.get("bal", 0) + reward
+    user["daily"] = now
+
+    # Save back to MongoDB
+    await update_user(uid, user)
+
+    await msg.reply_text(
+        f"✅ Daily reward claimed successfully!\n"
+        f"💰 You received ₹{reward}."
+        )
+
+
+#--------------bal-------------
+@app.on_message(filters.command("bal"))
+async def bal(_, msg: Message):
+    # Reply to check someone else's balance
+    if msg.reply_to_message:
+        if msg.reply_to_message.from_user.is_bot:
+            return await msg.reply_text("❌ Bot balance cannot be checked")
+
+        uid = msg.reply_to_message.from_user.id
+        name = msg.reply_to_message.from_user.first_name
+    else:
+        # Self balance
+        uid = msg.from_user.id
+        name = msg.from_user.first_name
+
+    # --- Fetch user from MongoDB (async) ---
+    u = await get_user(uid)
+
+    # --- Get all users for ranking ---
+    all_users = await get_all_users()
+    normal_users = sorted(
+        ((x["_id"], x) for x in all_users if x["_id"] != OWNER_ID),
+        key=lambda x: x[1].get("bal", 0),
+        reverse=True
+    )
+
+    # Global rank
+    if uid == OWNER_ID:
+        grank = "♾️"
+    else:
+        grank = next((i + 1 for i, x in enumerate(normal_users) if x[0] == uid), "N/A")
+
+    # Alive / Dead status
+    status = "☠️ Dead" if u.get("dead", False) else "❤️ Alive"
+
+    # Protection status
+    protect_status = "🛡️ Protected" if await is_protected_local(uid) else "❌ Protection Expired"
+
+    text = (
+        f"👤 Name: {name}\n"
+        f"💰 Balance: ₹{u['bal']}\n"
+        f"🏆 Global Rank: {grank}\n"
+        f"💗 Status :{status}\n"
+        f"⚔️ Kills: {u['kills']}\n"
+        f"🌚 Secret: {protect_status}"
+    )
+
+    await msg.reply_text(text)
+
+    # Save/update user in MongoDB
+    await update_user(uid, u)
+
+# ---------------- GIVE ----------------
+@app.on_message(filters.command("give"))
+async def give(_, msg: Message):
+
+    # ----- Group economy check -----
+    if msg.chat.type in ["group", "supergroup"]:
+        chat_id = msg.chat.id
+        if not group_eco_status.get(chat_id, True):  # default ON
+            return await msg.reply_text(
+                "❌ Economy commands are currently disabled in this group.\n"
+                "👉 Admin use /eco open"
+            )
+
+    # ❌ must be reply
+    if not msg.reply_to_message:
+        return await msg.reply_text("❌ Reply to a user to give coins")
+
+    # ❌ FIX: reply but no user (anonymous / channel)
+    if not msg.reply_to_message.from_user:
+        return await msg.reply_text("❌ You cannot give coins to this user")
+
+    sender_id = msg.from_user.id
+    receiver_id = msg.reply_to_message.from_user.id
+    sender_name = msg.from_user.first_name
+    receiver_name = msg.reply_to_message.from_user.first_name
+
+    # ❌ self give
+    if sender_id == receiver_id:
+        return await msg.reply_text("❌ You cannot give coins to yourself")
+
+    # ❌ bot give
+    if msg.reply_to_message.from_user.is_bot:
+        return await msg.reply_text("❌ You cannot give coins to bots")
+
+    parts = msg.text.split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        return await msg.reply_text("❌ Usage: /give amount")
+
+    amt = int(parts[1])
+    if amt <= 0:
+        return await msg.reply_text("❌ Amount must be greater than 0")
+
+    sender = await get_user(sender_id)
+    rec = await get_user(receiver_id)
+
+    if sender["bal"] < amt:
+        return await msg.reply_text("❌ Not enough balance")
+
+    # 💸 Tax system
+    tax = int(amt * 0.10)
+    final_amt = amt - tax
+
+    sender["bal"] -= amt
+    rec["bal"] += final_amt
+
+    await update_user(sender_id, sender)
+    await update_user(receiver_id, rec)
+
+    await msg.reply_text(
+        f"✅ Transaction Successful!\n\n"
+        f"💰 Sent: ₹{final_amt}\n"
+        f"💸 Tax: ₹{tax}\n"
+        f"👤 {sender_name} ➜ {receiver_name}"
+        )
+
+# ---------------- REVIVE ----------------
+
+ # ---------------- REVIVE ----------------
+@app.on_message(filters.command("revive"))
+async def revive(_, msg: Message):
+    # If replying to someone, revive them
+    if msg.reply_to_message:
+        target_id = msg.reply_to_message.from_user.id
+        target_name = msg.reply_to_message.from_user.first_name
+
+        if msg.reply_to_message.from_user.is_bot:
+            return await msg.reply_text("❌ You can't revive a bot")
+    else:
+        # Self revive
+        target_id = msg.from_user.id
+        target_name = msg.from_user.first_name
+
+    # Fetch both users from MongoDB
+    user = await get_user(msg.from_user.id)  # command caller
+    target = await get_user(target_id)       # person being revived
+
+    # Check if target is dead
+    if not target.get("dead", False):
+        return await msg.reply_text(f"✅ {target_name} is already alive!")
+
+    # Check if caller has enough balance
+    if user["bal"] < 500:
+        return await msg.reply_text("❌ Not enough coins to revive (₹500 required)")
+
+    # Deduct coins from caller
+    user["bal"] -= 500
+
+    # Revive the target
+    target["dead"] = False
+
+    # Save both users to MongoDB
+    await update_user(msg.from_user.id, user)
+    await update_user(target_id, target)
+
+    # Success message
+    if target_id == msg.from_user.id:
+        await msg.reply_text(f"🩺 You have revived yourself! ✅")
+    else:
+        await msg.reply_text(f"🩺 {target_name} has been revived! ✅")       
+
+#----- PROTECTED ------
+@app.on_message(filters.command("protect"))
+async def protect(_, msg: Message):
+
+    # Usage check
+    if len(msg.command) < 2 or msg.command[1] != "1d":
+        return await msg.reply_text(
+            "❌ Invalid usage.\n"
+            "✅ Correct format: /protect 1d"
+        )
+
+    uid = msg.from_user.id
+    now = time.time()
+
+    # 🔹 get user (ASYNC FIX)
+    u = await get_user(uid)
+
+    # 🛡️ Already protected check (FIXED)
+    if await is_protected_local(uid):
+        remaining_sec = int(u["protected_until"] - now)
+        hours = remaining_sec // 3600
+        minutes = (remaining_sec % 3600) // 60
+        seconds = remaining_sec % 60
+
+        return await msg.reply_text(
+            "🛡️ You are already protected.\n"
+            f"⏳ Time remaining: {hours}h {minutes}m {seconds}s"
+        )
+
+    # Balance check
+    if u["bal"] < PROTECT_COST:
+        return await msg.reply_text(
+            f"❌ Insufficient balance.\n"
+            f"💰 Protection cost: {PROTECT_COST}"
+        )
+
+    # Activate protection (24 hours)
+    u["bal"] -= PROTECT_COST
+    u["protected_until"] = now + 86400
+
+    # 💾 Save (ASYNC FIX)
+    await update_user(uid, u)
+
+    await msg.reply_text(
+        "🛡️ Protection activated successfully.\n"
+        "⏰ Duration: 1 day"
+        )
+
+
+
+# ---------------- SHILD (PAID PROTECTION CHECK) ----------------
+@app.on_message(filters.command("check"))
+async def check(_, msg):
+
+    user = msg.from_user
+    uid = user.id
+
+    u = await get_user(uid)
+
+    # 💰 Economy check (2000 required)
+    if u.get("bal", 0) < 2000:
+        return await msg.reply_text(
+            "❌ Insufficient Balance\n"
+            "🛡️ You need at least 2000 balance to use the /check command"
+        )
+
+    # 🎯 Target (reply hua to usko, warna khud)
+    if msg.reply_to_message and msg.reply_to_message.from_user:
+        target = msg.reply_to_message.from_user
+    else:
+        target = user
+
+    # 💸 Balance deduct (DB compatible)
+    u["bal"] -= 2000
+    await update_user(uid, u)
+
+    # ---------------- BOT CHECK ----------------
+    if target.is_bot:
+        text = (
+            "🛡️ Protection Status\n\n"
+            f"👤 User: {target.first_name}\n"
+            "❌ Bot's protection cannot be checked"
+        )
+    else:
+        now = time.time()
+        tu = await get_user(target.id)
+
+        # 🛡️ Protection info
+        if tu.get("protected_until", 0) > now:
+            remaining = int(tu["protected_until"] - now)
+            h = remaining // 3600
+            # m = (remaining % 3600) // 60
+
+            text = (
+                "🛡️ Protection Status\n\n"
+                f"👤 User: {target.first_name}\n"
+                "✅ Status: Active\n"
+                f"⏳ Time Left: {h}h "
+            )
+        else:
+            text = (
+                "🛡️ Protection Status\n\n"
+                f"👤 User: {target.first_name}\n"
+                "❌ Status: Not Active"
+            )
+
+    # 📩 Send result in DM
+    try:
+        await _.send_message(uid, text)
+    except:
+        return await msg.reply_text(
+            "❌ DM is closed\n"
+            "📩 Please send /start to the bot in DM first"
+        )
+
+    # 📢 Group confirmation only
+    if msg.chat.type != "private":
+        await msg.reply_text("🛡️ Protection info sent in DM")
+
+# ---------------- ROB ----------------
+@app.on_message(filters.command("rob"))
+async def rob(_, msg: Message):
+
+    # ----- Group economy check -----
+    if msg.chat.type in ["group", "supergroup"]:
+        chat_id = msg.chat.id
+        if not group_eco_status.get(chat_id, True):
+            return await msg.reply_text(
+                "❌ Economy commands are currently disabled in this group.\n"
+                "👉 Admin use /eco open"
+            )
+
+    # ❌ Must reply to a user
+    if not msg.reply_to_message or not msg.reply_to_message.from_user:
+        return await msg.reply_text("❌ Reply to a valid user to rob")
+
+    rid = msg.from_user.id
+    vid = msg.reply_to_message.from_user.id
+
+    # ❌ Invalid targets
+    if rid == vid:
+        return await msg.reply_text("❌ You cannot rob yourself 😂")
+
+    if vid == OWNER_ID:
+        return await msg.reply_text("❌ You cannot rob the Owner 🥺")
+
+    if msg.reply_to_message.from_user.is_bot:
+        return await msg.reply_text("❌ You can't rob a bot 🤔")
+
+    # 🛡️ Protection check
+    if await is_protected_local(vid):
+        return await msg.reply_text("🛡️ This user is protected")
+
+    # ----- Amount check -----
+    parts = msg.text.split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        return await msg.reply_text("❌ Usage: /rob amount")
+
+    amt = int(parts[1])
+
+    if amt <= 0:
+        return await msg.reply_text("❌ Amount must be greater than 0")
+
+    if amt > 20000:
+        return await msg.reply_text("❌ Rob limit is 20,000")
+
+    robber = await get_user(rid)
+    victim = await get_user(vid)
+
+    if victim.get("bal", 0) < amt:
+        return await msg.reply_text("❌ User too poor")
+
+    # 💸 Tax system
+    tax = int(amt * 0.10)
+    final_gain = amt - tax
+
+    robber["bal"] = robber.get("bal", 0) + final_gain
+    victim["bal"] = victim.get("bal", 0) - amt
+
+    # 💾 Save to DB
+    await update_user(rid, robber)
+    await update_user(vid, victim)
+
+    robber_name = msg.from_user.first_name or msg.from_user.username or "Unknown"
+    victim_name = msg.reply_to_message.from_user.first_name or msg.reply_to_message.from_user.username or "Unknown"
+
+    await msg.reply_text(
+        f"💣 **Rob Successful!**\n\n"
+        f"🦹 Robber: {robber_name}\n"
+        f"🎯 Victim: {victim_name}\n\n"
+        f"💰 Amount Robbed: ₹{amt}\n"
+        f"💸 Tax: ₹{tax}\n"
+        f"🤑 You Received: ₹{final_gain}",
+        parse_mode="markdown"
+    )
+
+    # ----- Send DM to victim (Safe) -----
+    try:
+        await _.send_message(
+            chat_id=vid,
+            text=(
+                "💣 **You Have Been Robbed!**\n\n"
+                f"🦹 Robber: {robber_name}\n"
+                f"💰 Amount Stolen: ₹{amt}\n"
+                f"🏠 Group: {msg.chat.title if msg.chat.title else 'Private'}\n\n"
+                "😈 Stay alert next time!\n"
+                "Buy protection 🛡️"
+            ),
+            parse_mode="markdown"
+        )
+    except:
+        pass
+
+
+# ---------------- KILL ----------------
+@app.on_message(filters.command("kill") & filters.group)
+async def kill(_, msg: Message):
+    # ----- Group economy check -----
+    chat_id = msg.chat.id
+    if not group_eco_status.get(chat_id, True):  # default ON
+        return await msg.reply_text(
+            "❌ Economy commands are currently disabled in this group."
+        )
+
+    # ❌ Must reply to a user
+    if not msg.reply_to_message or not msg.reply_to_message.from_user:
+        return await msg.reply_text("❌ Reply to a valid user in this group to use /kill")
+
+    rid = msg.from_user.id
+    vid = msg.reply_to_message.from_user.id
+
+    # ❌ Self kill
+    if rid == vid:
+        return await msg.reply_text("❌ You cannot kill yourself")
+
+    # ❌ Bot kill
+    if msg.reply_to_message.from_user.is_bot:
+        return await msg.reply_text("❌ You cannot kill a bot 🤖")
+
+    # ❌ Owner protection
+    if vid == OWNER_ID:
+        return await msg.reply_text("❌ You cannot kill My Bf 🥲")
+
+    # ----- Get killer and victim from DB -----
+    killer = await get_user(rid)      # ✅ await because it's async
+    victim = await get_user(vid)      # ✅ await because it's async
+
+    # ❌ Killer already dead
+    if killer.get("dead", False):
+        return await msg.reply_text("☠️ You are dead! Revive yourself first.")
+
+    # ❌ Victim already dead
+    if victim.get("dead", False):
+        return await msg.reply_text(
+            "☠️ This user is already dead. Revive is required before killing again."
+        )
+
+    # 🛡️ Protection check
+    if await is_protected_local(vid):   # ✅ await for async protection check
+        return await msg.reply_text("🛡️ This user is currently protected")
+
+   # ----- Kill process -----
+    reward = random.randint(150, 250)
+    tax = int(reward * 0.10)  # 10% tax
+
+    # Update killer
+    killer["bal"] += (reward - tax)
+    killer["kills"] += 1
+    await update_user(rid, killer)   # ✅ Save to MongoDB
+
+    # Update victim
+    victim["dead"] = True
+    await update_user(vid, victim)   # ✅ Save to MongoDB
+
+    killer_name = msg.from_user.first_name
+    victim_name = msg.reply_to_message.from_user.first_name
+
+    await msg.reply_text(
+        f"☠️ Kill Successful!\n\n"
+        f"🔪 Killer: {killer_name}\n"
+        f"💀 Victim: {victim_name}\n\n"
+        f"💰 Earned: ₹{reward - tax}\n"
+        f"💸 Tax: ₹{tax}"
+    ) 
+
+# ----- Send DM to victim -----
+    killer_user = msg.from_user
+    victim_user = msg.reply_to_message.from_user
+
+    try:
+        await app.send_message(
+            chat_id=vid,
+            text=(
+                "☠️ **You Have Been Killed!**\n\n"
+                f"🔪 **Killer:** {killer_user.first_name}\n"
+                f"👤 **Username:** @{killer_user.username if killer_user.username else 'No username'}\n"
+                f"🆔 **User ID:** `{killer_user.id}`\n\n"
+                f"💀 Killed in group: **{msg.chat.title}**\n\n"
+                "⚠️ You are now *dead*.\n"
+                "Use revive command if available 😈"
+            )
+        )
+    except Exception:
+        # User has blocked bot or never started DM
+        pass
+
+# ----- DM fallback -----
+@app.on_message(filters.command("kill") & filters.private)
+async def kill_dm(_, msg: Message):
+    await msg.reply_text(
+        "❌ You cannot use /kill in private chat.\n"
+        "👉 Reply to a user in a group and use /kill to execute it."
+    )
+    
+
+# ---------------- TOP RICH ----------------
+@app.on_message(filters.command("toprich") & (filters.group | filters.private))
+async def toprich(_, msg: Message):
+    top_users = await get_top_rich_users(limit=10)
+
+    if not top_users:
+        return await msg.reply_text("❌ No balance data available yet.")
+
+    text = "🏆 Top 10 Wealthiest Users:\n\n"
+
+    for u in top_users:
+        user_id = u["_id"]
+        bal = u.get("bal", 0)
+
+        # fallback name
+        name = f"User{user_id}"
+
+        # Telegram API try block
+        try:
+            user_obj = await app.get_users(user_id)
+            if user_obj.username:
+                name = f"@{user_obj.username}"
+            elif user_obj.first_name:
+                name = user_obj.first_name
+        except Exception as e:
+            print(f"[toprich] Telegram API error for {user_id}: {e}")
+
+        icon = "💓" if bal >= 500_000 else "👤"
+        text += f"{icon} {name}: 💰 ₹{bal}\n"
+
+    text += "\n💓 = Premium • 👤 = Regular\n✅ Earn 500k+ coins to upgrade!"
+    await msg.reply_text(text)
+
+
+# ---------------- TOP KILL ----------------
+@app.on_message(filters.command("topkill") & (filters.group | filters.private))
+async def topkill(_, msg: Message):
+    top_users = await get_top_kill_users(limit=10)
+
+    if not top_users:
+        return await msg.reply_text("❌ No kill data available yet.")
+
+    text = "☠️ Top 10 Killers:\n\n"
+
+    for u in top_users:
+        user_id = u["_id"]
+        kills = u.get("kills", 0)
+
+        name = f"User{user_id}"
+
+        try:
+            user_obj = await app.get_users(user_id)
+            if user_obj.username:
+                name = f"@{user_obj.username}"
+            elif user_obj.first_name:
+                name = user_obj.first_name
+        except Exception as e:
+            print(f"[topkill] Telegram API error for {user_id}: {e}")
+
+        icon = "💓" if kills >= 500 else "👤"
+        text += f"{icon} {name}: ⚔️ {kills} kills\n"
+
+    text += "\n💓 = Premium • 👤 = Regular\n✅ 500+ kills to upgrade!"
+    await msg.reply_text(text)
+
+#ping------
+@app.on_message(filters.command("ping"))
+async def ping(_, m):
+    await m.reply_text("ping pong ")
+
+# ----------- LOTTERY COMMANDS -----------
+
+@app.on_message(filters.command("lottery"))
+async def cmd_lottery(_, msg):
+    await lottery_info(app, msg)
+
+
+@app.on_message(filters.command("joindaily"))
+async def cmd_joindaily(_, msg):
+    await join_daily(app, msg)
+
+
+@app.on_message(filters.command("joinmega"))
+async def cmd_joinmega(_, msg):
+    await join_mega(app, msg)
+
+
+@app.on_message(filters.command("listlottery"))
+async def cmd_listlottery(_, msg):
+    await list_lottery_players(app, msg)
+
+# ----------- LOTTERY CALLBACKS -----------
+
+@app.on_callback_query(filters.regex("^join_daily$"))
+async def cb_join_daily(_, cq):
+    await join_daily(app, cq.from_user.id, cq.message.reply_text)
+    await cq.answer("Daily lottery joined!")
+
+
+@app.on_callback_query(filters.regex("^join_mega$"))
+async def cb_join_mega(_, cq):
+    await join_mega(app, cq.from_user.id, cq.message.reply_text)
+    await cq.answer("Mega lottery joined!")
+
+
+#-----------claim-------------
+@app.on_message(filters.command("claim") & filters.group)
+async def claim(_, msg: Message):
+
+    chat_id = msg.chat.id
+    user_id = msg.from_user.id
+
+    # ❌ Already claimed (MongoDB check)
+    if await is_group_claimed(chat_id):
+        return await msg.reply_text("❌ This group reward is already claimed!")
+
+    # ✅ Get correct member count
+    try:
+        chat = await app.get_chat(chat_id)
+        members = chat.members_count or 0
+    except:
+        return await msg.reply_text("❌ Unable to verify group members")
+
+    if members < 100:
+        return await msg.reply_text("❌ Group must have at least 100 members")
+
+    user = await get_user(user_id)  # ✅ await here
+
+    reward = 10000
+    user["bal"] += reward
+
+    # 💾 Save user to MongoDB
+    await update_user(user_id, user)  # ✅ await here
+
+    # 🔒 Lock group permanently in MongoDB
+    await mark_group_claimed(chat_id)  # ✅ await here
+
+    await msg.reply_text(
+        f"🎉 Claim Successful!\n"
+        f"💰 You received ₹{reward}\n\n"
+        f"🍷 Add me to another group to earn more rewards!"
+    )
+
+# ---------------- ECONOMY COMMAND ----------------
+@app.on_message(filters.command("economy"))
+async def economy(_, msg: Message):
+    await msg.reply_text(
+        ECONOMY_TEXT,
+        disable_web_page_preview=True
+    )
+
+# ---------- STEP 7 : AUTO AI CHAT ----------
+
+@app.on_message(filters.reply & filters.text)
+async def auto_ai(_, msg: Message):
+
+    if msg.text.startswith("/"):
+        return
+
+    if not msg.reply_to_message:
+        return
+
+    if not msg.reply_to_message.from_user:
+        return
+
+    if not msg.reply_to_message.from_user.is_bot:
+        return
+
+    # ✅ FIXED LINE
+    await msg.reply_chat_action(ChatAction.TYPING)
+
+    reply = groq_reply(msg.text)
+    await msg.reply_text(reply)
+
+#--------time-mng-lottery
+# Bot start ke thoda pehle
+
+def start_lottery_scheduler():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(lottery_scheduler(app))
+
+threading.Thread(target=start_lottery_scheduler, daemon=True).start()
+
+print("✅ Leena Bot Started Successfully")
+app.run()
