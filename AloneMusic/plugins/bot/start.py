@@ -35,11 +35,12 @@ EFFECT_ID = [
     5159385139981059251,
 ]
 
-# RANDOM REACTIONS LIST
+# 💯 VALID TELEGRAM RANDOM REACTIONS LIST
 REACTIONS = [
-    "🍓","🔥","❤️","💙","😍","😎","😂","🥰","🤩","💯",
-    "⚡","✨","🌟","🎉","🍀","🎯","💫","🌸","🍕","🍉",
-    "🫶","😈","👀","😄","🚀","🐱","🐼","🦄","🍭","🎶"
+    "🍓", "🔥", "❤️", "😍", "😂", "🥰", "🤩", "💯",
+    "⚡", "🎉", "😈", "👀", "😁", "🦄", "👍", "👏",
+    "❤️‍🔥", "🌭", "🏆", "💔", "💋", "👻", "😇", "💅",
+    "🐳", "🌚", "🍌", "🤨", "😐", "🍾", "🖕", "😭"
 ]
 
 
@@ -48,11 +49,15 @@ REACTIONS = [
 async def start_pm(client, message: Message, _):
     await add_served_user(message.from_user.id)
 
-    # RANDOM REACTION
+    # RANDOM REACTION (FIXED)
     try:
-        await message.react(random.choice(REACTIONS))
-    except:
-        pass
+        await client.send_reaction(
+            chat_id=message.chat.id, 
+            message_id=message.id, 
+            emoji=random.choice(REACTIONS)
+        )
+    except Exception as e:
+        print(f"Reaction Error: {e}")
 
     if len(message.text.split()) > 1:
         name = message.text.split(None, 1)[1]
@@ -151,6 +156,16 @@ async def start_pm(client, message: Message, _):
 async def start_gp(client, message: Message, _):
     out = start_panel(_)
     uptime = int(time.time() - _boot_)
+    
+    # GROUP ME BHI RANDOM REACTION ADD KAR DIYA
+    try:
+        await client.send_reaction(
+            chat_id=message.chat.id, 
+            message_id=message.id, 
+            emoji=random.choice(REACTIONS)
+        )
+    except Exception:
+        pass
 
     await message.reply_photo(
         photo=config.START_IMG_URL,
@@ -211,3 +226,4 @@ async def welcome(client, message: Message):
 
         except Exception as ex:
             print(ex)
+
