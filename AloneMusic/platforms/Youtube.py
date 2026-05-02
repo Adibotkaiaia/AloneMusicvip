@@ -176,21 +176,6 @@ async def check_file_size(link):
     return total_size
 
 
-async def shell_cmd(cmd):
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    out, errorz = await proc.communicate()
-    if errorz:
-        if "unavailable videos are hidden" in (errorz.decode("utf-8")).lower():
-            return out.decode("utf-8")
-        else:
-            return errorz.decode("utf-8")
-    return out.decode("utf-8")
-
-
 class YouTubeAPI:
     def __init__(self):
         self.base = "https://www.youtube.com/watch?v="
@@ -309,6 +294,7 @@ class YouTubeAPI:
         else:
             return 0, stderr.decode()
 
+    # 🛡️ BANK-LEVEL SECURE PLAYLIST FUNCTION 🛡️
     async def playlist(self, link, limit, user_id, videoid: Union[bool, str] = None):
         if videoid:
             link = self.listbase + link
@@ -320,14 +306,20 @@ class YouTubeAPI:
         cookie_file = cookie_txt_file()
         if not cookie_file:
             return []
-        playlist = await shell_cmd(
-            f"yt-dlp -i --get-id --flat-playlist --cookies {cookie_file} --playlist-end {limit} --skip-download {link}"
+            
+        # 🚀 ANTI-INJECTION FIX: Shell bypass hata diya gaya hai.
+        cmd = ["yt-dlp", "-i", "--get-id", "--flat-playlist", "--cookies", cookie_file, "--playlist-end", str(limit), "--skip-download", link]
+        
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
+        stdout, stderr = await proc.communicate()
+        
         try:
-            result = playlist.split("\n")
-            for key in result:
-                if key == "":
-                    result.remove(key)
+            result = stdout.decode().split("\n")
+            result = [key for key in result if key != ""]
         except:
             result = []
         return result
