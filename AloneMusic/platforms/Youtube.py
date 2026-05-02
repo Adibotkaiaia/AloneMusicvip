@@ -521,6 +521,24 @@ class YouTubeAPI:
             fpath = f"downloads/{link}.mp3"
             return fpath
         elif video:
+            cookie_file = cookie_txt_file()
+            # 🚀 INSTANT STREAM LINK EXTRACTION FOR VIDEO
+            cmd = ["yt-dlp", "-g", "-f", "best[height<=?720][width<=?1280]"]
+            if cookie_file:
+                cmd = ["yt-dlp", "--cookies", cookie_file, "-g", "-f", "best[height<=?720][width<=?1280]"]
+                
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, f"{link}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            if stdout:
+                downloaded_file = stdout.decode().split("\n")[0]
+                direct = False
+                return downloaded_file, direct
+                
+            # Fallback agar extraction fail ho
             try:
                 downloaded_file = await download_video(link)
                 if downloaded_file:
@@ -528,38 +546,31 @@ class YouTubeAPI:
                     return downloaded_file, direct
             except Exception as e:
                 print(f"Video API failed: {e}")
-            cookie_file = cookie_txt_file()
-            if not cookie_file:
-                return None, None
-            if await is_on_off(1):
-                direct = True
-                downloaded_file = await download_song(link)
-            else:
-                proc = await asyncio.create_subprocess_exec(
-                    "yt-dlp",
-                    "--cookies",
-                    cookie_file,
-                    "-g",
-                    "-f",
-                    "best[height<=?720][width<=?1280]",
-                    f"{link}",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await proc.communicate()
-                if stdout:
-                    downloaded_file = stdout.decode().split("\n")[0]
-                    direct = False
-                else:
-                    file_size = await check_file_size(link)
-                    if not file_size:
-                        return None, None
-                    total_size_mb = file_size / (1024 * 1024)
-                    if total_size_mb > 250:
-                        return None, None
-                    direct = True
-                    downloaded_file = await loop.run_in_executor(None, video_dl)
+            
+            direct = True
+            downloaded_file = await loop.run_in_executor(None, video_dl)
+            return downloaded_file, direct
+            
         else:
+            cookie_file = cookie_txt_file()
+            # 🚀 INSTANT STREAM LINK EXTRACTION FOR AUDIO
+            cmd = ["yt-dlp", "-g", "-f", "bestaudio"]
+            if cookie_file:
+                cmd = ["yt-dlp", "--cookies", cookie_file, "-g", "-f", "bestaudio"]
+                
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, f"{link}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            if stdout:
+                downloaded_file = stdout.decode().split("\n")[0]
+                direct = False
+                return downloaded_file, direct
+                
+            # Fallback agar extraction fail ho
             direct = True
             downloaded_file = await download_song(link)
-        return downloaded_file, direct
+            return downloaded_file, direct
+
