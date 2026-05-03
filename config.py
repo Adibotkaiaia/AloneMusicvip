@@ -55,11 +55,11 @@ GIT_TOKEN = getenv("GIT_TOKEN", None)
 
 SUPPORT_CHANNEL = getenv(
     "SUPPORT_CHANNEL",
-    "https://t.me/Il_vip_support_lI"
+    "https://t.me/Il_ADI_lI"
 )
 SUPPORT_CHAT = getenv(
     "SUPPORT_CHAT",
-    "https://t.me/VIP_SUPPORT_II"
+    "https://t.me/II_ADI_II"
 )
 
 # -------------------- ASSISTANT --------------------
